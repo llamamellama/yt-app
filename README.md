@@ -59,3 +59,54 @@ docker compose up --build
 
 Visit http://localhost:5001 after the container starts. Downloads will be saved to the local `downloads` folder through a bind mount.
 
+## Distribution
+
+Build standalone executables with PyInstaller (bundles Python and the app):
+
+### macOS
+
+```
+python -m pip install -r requirements.txt -r requirements-dev.txt
+bash scripts/build_macos.sh
+open dist/YouTubeDownloader
+```
+
+To bundle system ffmpeg explicitly (optional):
+
+```
+export FFMPEG_PATH="/usr/local/bin/ffmpeg"
+export FFPROBE_PATH="/usr/local/bin/ffprobe"
+bash scripts/build_macos.sh
+```
+
+Gatekeeper note: unsigned apps may prompt on first launch. For distribution, consider codesigning/notarization.
+
+### Windows
+
+```
+py -m pip install -r requirements.txt -r requirements-dev.txt
+PowerShell -ExecutionPolicy Bypass -File scripts/build_windows.ps1
+start dist/YouTubeDownloader/YouTubeDownloader.exe
+```
+
+Optionally specify ffmpeg paths:
+
+```
+PowerShell -ExecutionPolicy Bypass -File scripts/build_windows.ps1 -FfmpegPath "C:\\path\\to\\ffmpeg.exe" -FfprobePath "C:\\path\\to\\ffprobe.exe"
+```
+
+The app starts a local server on the configured port (default 5001) and auto-opens your browser.
+
+### Troubleshooting builds
+
+- Ensure you’re using the same Python interpreter for installing and building. The scripts call `python -m PyInstaller` to avoid PATH issues.
+- If you have multiple Pythons (pyenv, Homebrew, system), run:
+
+```
+which python
+python -V
+python -m pip show pyinstaller
+```
+
+- On macOS, if you see “command not found: pyinstaller”, re-run: `python -m pip install pyinstaller` and use `bash scripts/build_macos.sh`.
+
