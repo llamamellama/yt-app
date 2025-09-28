@@ -21,6 +21,7 @@ def create_app(downloads_dir: Path | None = None) -> Flask:
 
     app.config["DOWNLOADS_DIR"] = downloads_dir
     app.config["AVAILABLE_QUALITIES"] = AVAILABLE_QUALITIES
+    app.config["SESSION_DOWNLOADS"] = []  # list[str] of filenames for current run
 
     from .views import bp
 

@@ -15,6 +15,7 @@ bp = Blueprint("gui", __name__)
 def index() -> str:
     downloads_dir: Path = current_app.config["DOWNLOADS_DIR"]
     qualities = current_app.config["AVAILABLE_QUALITIES"]
+    session_downloads: list[str] = current_app.config.setdefault("SESSION_DOWNLOADS", [])
     last_download: str | None = None
 
     if request.method == "POST":
@@ -30,6 +31,7 @@ def index() -> str:
                 files = download_video(url, quality, downloads_dir=downloads_dir)
                 if files:
                     last_download = files[-1].name
+                    session_downloads.append(last_download)
                     flash(
                         f"Download complete: {last_download}",
                         "success",
@@ -41,12 +43,10 @@ def index() -> str:
 
         return redirect(url_for("gui.index"))
 
-    downloads = sorted(downloads_dir.glob("*")) if downloads_dir.exists() else []
-
     return render_template(
         "index.html",
         qualities=qualities,
-        downloads=downloads,
+        downloads=session_downloads,
         last_download=last_download,
     )
 
