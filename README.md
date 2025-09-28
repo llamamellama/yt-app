@@ -15,7 +15,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-2.1 CLI
+2.1. CLI
 
 ```
 python main.py "<youtube_url>"" <quality>
@@ -35,7 +35,7 @@ If `ffmpeg` is not installed, the script automatically falls back to single-stre
 brew install ffmpeg
 ```
 
-2.2 Graphic User Interface (GUI)
+2.2. Graphic User Interface (GUI)
 
 Run the Flask web UI locally:
 
@@ -57,5 +57,5 @@ Or run it via Docker:
 docker compose up --build
 ```
 
-Visit http://localhost:5000 after the container starts. Downloads will be saved to the local `downloads` folder through a bind mount.
+Visit http://localhost:5001 after the container starts. Downloads will be saved to the local `downloads` folder through a bind mount.
 
