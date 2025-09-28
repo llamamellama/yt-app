@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>YouTube Downloader</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 2rem auto; max-width: 720px; color: #222; }
+      h1 { text-align: center; }
+      form { margin-bottom: 2rem; padding: 1.5rem; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+      label { display: block; margin-bottom: 0.5rem; font-weight: 600; }
+      input[type="text"], select { width: 100%; padding: 0.75rem; margin-bottom: 1rem; border-radius: 6px; border: 1px solid #ccc; }
+      button { padding: 0.75rem 1.5rem; border: none; border-radius: 6px; background: #c4302b; color: #fff; cursor: pointer; font-size: 1rem; }
+      button:hover { background: #a52723; }
+      .messages { margin-bottom: 1rem; }
+      .message { padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 0.5rem; }
+      .message.error { background: #ffe5e5; color: #b20000; }
+      .message.success { background: #e7f7ed; color: #1e7a34; }
+      .downloads ul { list-style: none; padding-left: 0; }
+      .downloads li { margin-bottom: 0.5rem; }
+      .downloads a { color: #1a0dab; text-decoration: none; }
+      .downloads a:hover { text-decoration: underline; }
+    </style>
+  </head>
+  <body>
+    <h1>YouTube Downloader</h1>
+
+    <div class="messages">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="message {{ category }}">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+    </div>
+
+    <form method="post">
+      <label for="url">YouTube Link</label>
+      <input type="text" id="url" name="url" placeholder="https://www.youtube.com/watch?v=..." required>
+
+      <label for="quality">Video Quality</label>
+      <select id="quality" name="quality">
+        {% for quality in qualities %}
+          <option value="{{ quality }}">{{ quality }}</option>
+        {% endfor %}
+      </select>
+
+      <button type="submit">Download</button>
+    </form>
+
+    <section class="downloads">
+      <h2>Recent Downloads</h2>
+      {% if downloads %}
+        <ul>
+          {% for file in downloads %}
+            <li>{{ file.name }}</li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p>No downloads yet.</p>
+      {% endif %}
+    </section>
+  </body>
+</html>
+

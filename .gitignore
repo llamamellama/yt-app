@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtualenv
+.venv/
+
+# Local OS
+.DS_Store
+
+# App data
+downloads/
+
+# Byte-compiled
+*.pyo
