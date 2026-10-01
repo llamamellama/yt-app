@@ -1,6 +1,6 @@
 # YouTube Downloader
 
-Simple CLI and web UI to download YouTube videos at a requested quality using `yt-dlp`.
+Simple CLI and web UI to download YouTube videos (or just their audio) at a requested quality using `yt-dlp`.
 
 ### Optional
 
@@ -20,7 +20,7 @@ pip install -r requirements.txt
 2.1. CLI
 
 ```
-python main.py "<youtube_url>"" <quality>
+python main.py "<youtube_url>" <quality>
 ```
 
 Example:
@@ -29,7 +29,33 @@ Example:
 python main.py "https://www.youtube.com/watch?v=dQw4w9WgXcQ" best
 ```
 
-Supported qualities include `2160p`, `1440p`, `1080p`, `720p`, `480p`, `360p`, and `best`.
+Supported qualities include `2160p`, `1440p`, `1080p`, `720p`, `480p`, `360p`, `best`, `audio`, and `audio-opus`.
+
+#### Audio only
+
+Use `audio` to download just the sound track as AAC (`.m4a`), which plays almost
+everywhere, including Apple Music and QuickTime:
+
+```
+python main.py "https://www.youtube.com/watch?v=dQw4w9WgXcQ" audio
+```
+
+Use `audio-opus` to get YouTube's Opus stream (`.opus`) instead:
+
+```
+python main.py "https://www.youtube.com/watch?v=dQw4w9WgXcQ" audio-opus
+```
+
+Both pick the best stream of that type (original language, highest quality) and save
+it **without re-encoding**, so nothing is lost. At YouTube's bitrates the two sound the
+same to most listeners. `.opus` files play in VLC, web browsers, Windows, and QuickTime
+on recent macOS (tested on macOS 26); older Macs and devices such as car stereos may
+not support them. In the rare case that a video has no AAC stream, `audio` converts the
+best available stream to AAC at 192 kbps.
+
+Install `ffmpeg` for clean audio files. Without it, the stream is saved exactly as
+downloaded: AAC as YouTube's raw `.m4a`, which some players (including macOS) show
+with the wrong length, and Opus as a `.webm` file, which QuickTime can't open.
 
 If `ffmpeg` is not installed, the script automatically falls back to single-stream downloads, which may reduce quality. Install `ffmpeg` for the best results:
 
@@ -82,7 +108,7 @@ Run the Flask web UI locally:
 python app.py
 ```
 
-Open http://localhost:5001 and use the form to paste a YouTube URL and choose the quality from the dropdown. Recent downloads appear below the form.
+Open http://localhost:5001 and use the form to paste a YouTube URL and choose the quality from the dropdown (pick `audio only (AAC)` or `audio only (Opus)` to save just the audio). Recent downloads appear below the form.
 
 Optionally set a custom secret key (recommended for multi-user deployments):
 

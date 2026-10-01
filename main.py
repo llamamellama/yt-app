@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Download YouTube videos at a requested quality via yt-dlp."""
+"""Download YouTube videos (or just their audio) at a requested quality via yt-dlp."""
 
 from __future__ import annotations
 
@@ -19,13 +19,16 @@ from yt_downloader.downloader import (
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Download a YouTube video with the desired quality using yt-dlp.",
+        description="Download a YouTube video (or just its audio) with the desired quality using yt-dlp.",
     )
     parser.add_argument("url", help="YouTube video URL")
     parser.add_argument(
         "quality",
         choices=AVAILABLE_QUALITIES,
-        help="Desired video quality (e.g. 1080p, 720p, best)",
+        help=(
+            "Desired video quality (e.g. 1080p, 720p, best), or audio only: "
+            "'audio' for AAC (.m4a) or 'audio-opus' for Opus (.opus)"
+        ),
     )
     parser.add_argument(
         "--output",

@@ -22,6 +22,12 @@ QUALITY_OPTIONS = {
     "480p": "bestvideo[height<=480]+bestaudio/best[height<=480]",
     "360p": "bestvideo[height<=360]+bestaudio/best[height<=360]",
     "best": "bestvideo+bestaudio/best",
+    # Audio only. "audio" (the default) prefers YouTube's AAC stream, which plays
+    # almost everywhere; "audio-opus" prefers its Opus stream. Within each, yt-dlp
+    # still picks the original language, non-DRC, highest quality tier. The
+    # /best fallback relies on ffmpeg to drop the video.
+    "audio": "bestaudio[acodec^=mp4a]/bestaudio/best",
+    "audio-opus": "bestaudio[acodec=opus]/bestaudio/best",
 }
 
 FALLBACK_OPTIONS = {
@@ -32,6 +38,18 @@ FALLBACK_OPTIONS = {
     "480p": "best[height<=480]",
     "360p": "best[height<=360]",
     "best": "best",
+    # Without ffmpeg we can't strip video from a combined stream, so require a
+    # real audio-only stream rather than silently saving a video.
+    "audio": "bestaudio[acodec^=mp4a]/bestaudio",
+    "audio-opus": "bestaudio[acodec=opus]/bestaudio",
+}
+
+# Codec ffmpeg saves each audio-only quality as. "m4a" always yields AAC: it
+# copies an AAC stream as-is and re-encodes only if none was available. "best"
+# never re-encodes; it keeps whatever codec was downloaded.
+AUDIO_CODECS = {
+    "audio": "m4a",
+    "audio-opus": "best",
 }
 
 AVAILABLE_QUALITIES = tuple(QUALITY_OPTIONS.keys())
@@ -174,14 +192,21 @@ def download_video(
     output_template: str = DEFAULT_OUTPUT_TEMPLATE,
     cookies_from_browser: str | None = None,
     cookies_file: Path | None = None,
-) -> list[str]:
+) -> list[Path]:
     downloads_dir.mkdir(parents=True, exist_ok=True)
     can_merge = ffmpeg_available()
+    audio_codec = AUDIO_CODECS.get(quality)
     format_selector = QUALITY_OPTIONS[quality] if can_merge else FALLBACK_OPTIONS[quality]
 
     if not can_merge and "+" in QUALITY_OPTIONS[quality]:
         print(
             "Warning: ffmpeg not found. Falling back to a single-stream download, which may reduce quality.",
+            file=sys.stderr,
+        )
+    if not can_merge and audio_codec:
+        print(
+            "Warning: ffmpeg not found. Saving the audio stream exactly as downloaded, which some players "
+            "handle poorly (e.g. showing the wrong length). Install ffmpeg for a standard audio file.",
             file=sys.stderr,
         )
 
@@ -190,12 +215,26 @@ def download_video(
         "outtmpl": str(downloads_dir / output_template),
         "quiet": False,
         "noplaylist": True,
-        "merge_output_format": "mp4" if can_merge else None,
+        "merge_output_format": "mp4" if can_merge and not audio_codec else None,
     }
 
     # Remove None for merge_output_format to avoid yt-dlp warning
     if ydl_opts["merge_output_format"] is None:
         del ydl_opts["merge_output_format"]
+
+    # Save audio as a plain audio file (.m4a for AAC, .opus for Opus). A stream
+    # already in the target codec is copied, not re-encoded, so it keeps exactly
+    # the quality YouTube serves.
+    if audio_codec and can_merge:
+        ydl_opts["postprocessors"] = [
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": audio_codec,
+                # Only used if a stream must be re-encoded (e.g. no AAC stream
+                # for "audio"); high enough to keep the extra loss small.
+                "preferredquality": "192",
+            }
+        ]
 
     # Use an installed JS runtime (node/deno/etc.) so all formats resolve and
     # YouTube doesn't fall back to SABR-only streams that return HTTP 403.
@@ -232,16 +271,19 @@ def download_video(
 def _collect_downloaded_files(info: dict[str, object]) -> list[Path]:
     filenames: list[Path] = []
 
+    # Prefer "filepath": it is the final file after post-processing (e.g. audio
+    # extracted to .opus), while "_filename" is the pre-processing name, which
+    # yt-dlp deletes once the post-processor finishes.
     requested_downloads = info.get("requested_downloads") if isinstance(info, dict) else None
     if isinstance(requested_downloads, Iterable):
         for item in requested_downloads:
             if isinstance(item, dict):
-                filename = item.get("_filename") or item.get("filepath")
+                filename = item.get("filepath") or item.get("_filename")
                 if isinstance(filename, str):
                     filenames.append(Path(filename))
 
     if not filenames and isinstance(info, dict):
-        filename = info.get("_filename") or info.get("filepath")
+        filename = info.get("filepath") or info.get("_filename")
         if isinstance(filename, str):
             filenames.append(Path(filename))
 
