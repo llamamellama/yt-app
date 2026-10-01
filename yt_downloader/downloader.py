@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Iterable
@@ -33,9 +36,134 @@ FALLBACK_OPTIONS = {
 
 AVAILABLE_QUALITIES = tuple(QUALITY_OPTIONS.keys())
 
+# Browsers yt-dlp can read cookies from directly. Used to authenticate
+# downloads of restricted videos (age-restricted, members-only, private,
+# premium, or region-locked) that otherwise return HTTP 403 Forbidden.
+SUPPORTED_COOKIE_BROWSERS = (
+    "chrome",
+    "safari",
+    "firefox",
+    "edge",
+    "brave",
+    "chromium",
+    "opera",
+    "vivaldi",
+)
+
 
 def ffmpeg_available() -> bool:
     return shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
+
+
+# Binary name yt-dlp expects for each runtime, in yt-dlp's priority order.
+JS_RUNTIME_BINARIES = {
+    "deno": "deno",
+    "node": "node",
+    "bun": "bun",
+    "quickjs": "qjs",
+}
+
+# Minimum versions accepted by yt-dlp (mirrors yt_dlp.utils._jsruntime); only
+# used as a fallback if yt-dlp's own runtime probing API is unavailable.
+JS_RUNTIME_MIN_VERSIONS = {
+    "deno": (2, 3, 0),
+    "node": (22, 0, 0),
+    "bun": (1, 2, 11),
+}
+
+
+def _candidate_runtime_paths(binary: str) -> list[Path]:
+    """Locate every copy of *binary* we can find: PATH, then version managers."""
+    home = Path.home()
+    candidates: list[Path] = []
+
+    if found := shutil.which(binary):
+        candidates.append(Path(found))
+
+    # Common install locations that may not be on PATH (or may be shadowed by an
+    # older default), e.g. nvm keeps every installed Node version side by side.
+    search_dirs: list[Path] = [
+        Path("/opt/homebrew/bin"),
+        Path("/usr/local/bin"),
+        home / ".deno" / "bin",
+        home / ".bun" / "bin",
+        home / ".volta" / "bin",
+    ]
+    nvm_dir = Path(os.environ.get("NVM_DIR", home / ".nvm"))
+    search_dirs.extend(sorted((nvm_dir / "versions" / "node").glob("*/bin"), reverse=True))
+    search_dirs.extend(sorted((home / ".fnm" / "node-versions").glob("*/installation/bin"), reverse=True))
+    search_dirs.extend(sorted((home / ".local" / "share" / "fnm" / "node-versions").glob("*/installation/bin"), reverse=True))
+
+    for directory in search_dirs:
+        exe = directory / binary
+        if exe.is_file() and os.access(exe, os.X_OK):
+            candidates.append(exe)
+
+    # De-duplicate while preserving order (resolve symlinks such as nvm shims).
+    seen: set[Path] = set()
+    unique: list[Path] = []
+    for path in candidates:
+        real = path.resolve()
+        if real not in seen:
+            seen.add(real)
+            unique.append(path)
+    return unique
+
+
+def _probe_runtime(name: str, path: Path) -> tuple[int, ...] | None:
+    """Return the runtime's version tuple if yt-dlp considers it supported."""
+    try:
+        from yt_dlp.globals import supported_js_runtimes
+
+        runtime_cls = supported_js_runtimes.value.get(name)
+    except Exception:  # pragma: no cover - API drift in yt-dlp
+        runtime_cls = None
+
+    if runtime_cls is not None:
+        try:
+            info = runtime_cls(path=str(path)).info
+        except Exception:
+            return None
+        if info is None or not info.supported:
+            return None
+        return tuple(info.version_tuple)
+
+    # Fallback: parse `--version` ourselves.
+    try:
+        out = subprocess.run(
+            [str(path), "--version"], capture_output=True, text=True, timeout=10, check=False
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    match = re.search(r"(\d+(?:\.\d+)+)", out)
+    if not match:
+        return None
+    version = tuple(int(part) for part in match.group(1).split("."))
+    if version < JS_RUNTIME_MIN_VERSIONS.get(name, (0,)):
+        return None
+    return version
+
+
+def detect_js_runtimes() -> dict[str, dict]:
+    """Return supported JavaScript runtimes to hand to yt-dlp as ``js_runtimes``.
+
+    Modern yt-dlp needs a JS runtime to solve YouTube's player/nsig challenge.
+    Without one it skips formats and can pick a stream URL that returns HTTP
+    403. yt-dlp only auto-enables ``deno`` and, since 2026.8, rejects Node
+    older than 22. This looks in PATH *and* in nvm/fnm/Homebrew install
+    locations, verifies each candidate against yt-dlp's minimum version, and
+    returns the newest supported copy of each runtime with an explicit path.
+    """
+    runtimes: dict[str, dict] = {}
+    for name, binary in JS_RUNTIME_BINARIES.items():
+        best: tuple[tuple[int, ...], Path] | None = None
+        for path in _candidate_runtime_paths(binary):
+            version = _probe_runtime(name, path)
+            if version is not None and (best is None or version > best[0]):
+                best = (version, path)
+        if best is not None:
+            runtimes[name] = {"path": str(best[1])}
+    return runtimes
 
 
 def download_video(
@@ -44,6 +172,8 @@ def download_video(
     *,
     downloads_dir: Path,
     output_template: str = DEFAULT_OUTPUT_TEMPLATE,
+    cookies_from_browser: str | None = None,
+    cookies_file: Path | None = None,
 ) -> list[str]:
     downloads_dir.mkdir(parents=True, exist_ok=True)
     can_merge = ffmpeg_available()
@@ -66,6 +196,32 @@ def download_video(
     # Remove None for merge_output_format to avoid yt-dlp warning
     if ydl_opts["merge_output_format"] is None:
         del ydl_opts["merge_output_format"]
+
+    # Use an installed JS runtime (node/deno/etc.) so all formats resolve and
+    # YouTube doesn't fall back to SABR-only streams that return HTTP 403.
+    js_runtimes = detect_js_runtimes()
+    if js_runtimes:
+        ydl_opts["js_runtimes"] = js_runtimes
+    else:
+        print(
+            "Warning: no supported JavaScript runtime found (yt-dlp needs Node >= 22, "
+            "Deno >= 2.3, or Bun >= 1.2.11). Some formats may be missing and downloads "
+            "may fail with HTTP 403. Install one, e.g. `brew install node` or `nvm install 22`.",
+            file=sys.stderr,
+        )
+
+    # Authenticate as a signed-in user for restricted videos that 403 otherwise.
+    if cookies_from_browser:
+        browser = cookies_from_browser.strip().lower()
+        if browser not in SUPPORTED_COOKIE_BROWSERS:
+            raise ValueError(
+                f"Unsupported browser '{cookies_from_browser}'. "
+                f"Choose one of: {', '.join(SUPPORTED_COOKIE_BROWSERS)}."
+            )
+        # yt-dlp expects a tuple: (browser, profile, keyring, container)
+        ydl_opts["cookiesfrombrowser"] = (browser,)
+    if cookies_file:
+        ydl_opts["cookiefile"] = str(cookies_file)
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)

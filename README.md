@@ -4,6 +4,8 @@ Simple CLI and web UI to download YouTube videos at a requested quality using `y
 
 ### Optional
 
+Python 3.11 or newer is recommended (yt-dlp has deprecated Python 3.10).
+
 ```
 python3 -m venv .venv
 source .venv/bin/activate
@@ -34,6 +36,43 @@ If `ffmpeg` is not installed, the script automatically falls back to single-stre
 ```
 brew install ffmpeg
 ```
+
+#### Required: a JavaScript runtime (fixes HTTP 403 / "format not available")
+
+YouTube requires solving a JavaScript challenge to obtain stream URLs. Modern
+`yt-dlp` needs **two things** for this, or downloads fail with `HTTP Error 403:
+Forbidden` or `Requested format is not available`:
+
+1. A JavaScript runtime: **Node.js 22+**, Deno 2.3+, Bun 1.2.11+, or QuickJS.
+   The downloader auto-detects them on your `PATH` and also looks inside
+   nvm/fnm/Homebrew install locations, so an old default `node` won't block a
+   newer installed version. If you have none, install one:
+   ```
+   brew install node      # or: nvm install 22   /   brew install deno
+   ```
+   Older Node (18/20) is rejected by current yt-dlp and downloads may 403.
+2. The `yt-dlp-ejs` challenge-solver package, which is included in
+   `requirements.txt` (`pip install -r requirements.txt`).
+
+Also keep `yt-dlp` up to date — YouTube changes often and old versions stop
+working. **If downloads that used to work start failing with `HTTP Error 403`,
+this is the first thing to try:**
+
+```
+pip install -U yt-dlp yt-dlp-ejs
+```
+
+#### Restricted videos (optional)
+
+For age-restricted, members-only, private, or region-locked videos, pass your
+browser's login cookies:
+
+```
+python main.py "<youtube_url>" best --cookies-from-browser chrome
+```
+
+Supported browsers: `chrome`, `safari`, `firefox`, `edge`, `brave`, `chromium`,
+`opera`, `vivaldi`. You can also use an exported cookies.txt file with `--cookies path/to/cookies.txt`.
 
 2.2. Graphic User Interface (GUI)
 
