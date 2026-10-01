@@ -39,10 +39,11 @@
       <label for="url">YouTube Link</label>
       <input type="text" id="url" name="url" placeholder="https://www.youtube.com/watch?v=..." required>
 
-      <label for="quality">Video Quality</label>
+      <label for="quality">Quality</label>
       <select id="quality" name="quality">
+        {% set labels = {"audio": "audio only (AAC)", "audio-opus": "audio only (Opus)"} %}
         {% for quality in qualities %}
-          <option value="{{ quality }}">{{ quality }}</option>
+          <option value="{{ quality }}">{{ labels.get(quality, quality) }}</option>
         {% endfor %}
       </select>
 
