@@ -39,6 +39,19 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("downloads"),
         help="Directory to save downloads (default: downloads)",
     )
+    parser.add_argument(
+        "--cookies-from-browser",
+        help=(
+            "Read login cookies from this browser to download restricted videos "
+            "(age-restricted, members-only, private, premium, region-locked) that "
+            "fail with HTTP 403. Example: --cookies-from-browser chrome"
+        ),
+    )
+    parser.add_argument(
+        "--cookies",
+        type=Path,
+        help="Path to a cookies.txt file (Netscape format) for authenticated downloads.",
+    )
     return parser
 
 
@@ -52,7 +65,12 @@ def main(argv: list[str] | None = None) -> int:
             args.quality,
             downloads_dir=args.downloads_dir,
             output_template=args.output,
+            cookies_from_browser=args.cookies_from_browser,
+            cookies_file=args.cookies,
         )
+    except ValueError as exc:
+        print(f"Download failed: {exc}", file=sys.stderr)
+        return 2
     except DownloadError as exc:
         print(f"Download failed: {exc}", file=sys.stderr)
         return 1
